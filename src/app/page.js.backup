@@ -1,0 +1,402 @@
+'use client'
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function Home() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [folders, setFolders] = useState([]);
+  const [cards, setCards] = useState([]);
+  const [currentView, setCurrentView] = useState('dashboard');
+  const [selectedFolder, setSelectedFolder] = useState('inbox');
+  const [showNewCardModal, setShowNewCardModal] = useState(false);
+  const [newCardData, setNewCardData] = useState({
+    title: '',
+    body: '',
+    folderId: ''
+  });
+  const [creating, setCreating] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const token = localStorage.getItem('idpro_token');
+    const userData = localStorage.getItem('idpro_user');
+    
+    if (!token) {
+      router.push('/auth/login');
+      return;
+    }
+
+    if (userData) {
+      setUser(JSON.parse(userData));
+      loadData(token);
+    }
+    setLoading(false);
+  }, [router]);
+
+  const loadData = async (token) => {
+    try {
+      const foldersResponse = await fetch('/api/folders', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const foldersData = await foldersResponse.json();
+      if (foldersData.success) {
+        setFolders(foldersData.folders);
+        // Set first folder as default
+        if (foldersData.folders.length > 0) {
+          setNewCardData(prev => ({...prev, folderId: foldersData.folders[0].id}));
+        }
+      }
+
+      const cardsResponse = await fetch('/api/cards', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const cardsData = await cardsResponse.json();
+      if (cardsData.success) {
+        setCards(cardsData.cards);
+      }
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    }
+  };
+
+  const handleCreateCard = async (e) => {
+    e.preventDefault();
+    setCreating(true);
+
+    try {
+      const token = localStorage.getItem('idpro_token');
+      const response = await fetch('/api/cards/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(newCardData)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Reset form
+        setNewCardData({ title: '', body: '', folderId: folders[0]?.id || '' });
+        setShowNewCardModal(false);
+        // Reload data to show new card
+        loadData(token);
+        alert('Card created successfully!');
+      } else {
+        alert('Failed to create card: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Create card error:', error);
+      alert('Network error occurred');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('idpro_token');
+    localStorage.removeItem('idpro_user');
+    router.push('/auth/login');
+  };
+
+  if (loading) {
+    return (
+      <>
+        <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center mx-auto mb-4">
+              <span className="text-white font-bold text-lg">ID</span>
+            </div>
+            <p className="text-gray-600">Loading IDPRO Smart Cards...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  return (
+    <>
+      <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+      
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white shadow-sm border-b">
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">ID</span>
+                </div>
+                <h1 className="text-xl font-bold text-gray-900">IDPRO Smart Cards</h1>
+                <span className="text-sm text-gray-500">|</span>
+                <span className="text-sm text-gray-600">Demo Organization</span>
+              </div>
+              
+              <div className="flex items-center space-x-4">
+                <input 
+                  type="text" 
+                  placeholder="Search cards, folders, content..."
+                  className="w-80 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <button 
+                  onClick={() => setShowNewCardModal(true)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  + New Card
+                </button>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-600">👋 {user.first_name}</span>
+                  <button 
+                    onClick={handleLogout}
+                    className="text-sm text-red-600 hover:text-red-800"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex h-screen">
+          {/* Sidebar */}
+          <aside className="w-64 bg-white shadow-sm border-r">
+            <div className="p-4">
+              <h2 className="text-sm font-semibold text-gray-900 mb-3">Navigation</h2>
+              <div className="space-y-1">
+                <button 
+                  className={`w-full flex items-center px-3 py-2 text-sm rounded-md ${
+                    currentView === 'dashboard' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setCurrentView('dashboard')}
+                >
+                  <span className="mr-3">📊</span>
+                  Dashboard
+                </button>
+                <button 
+                  className={`w-full flex items-center px-3 py-2 text-sm rounded-md ${
+                    currentView === 'explorer' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setCurrentView('explorer')}
+                >
+                  <span className="mr-3">📁</span>
+                  Explorer
+                </button>
+              </div>
+            </div>
+
+            {currentView === 'explorer' && (
+              <div className="px-4 pb-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Folders</h3>
+                {folders.length > 0 ? (
+                  folders.map(folder => (
+                    <div 
+                      key={folder.id}
+                      className={`flex items-center p-2 hover:bg-blue-50 cursor-pointer rounded-md ${
+                        selectedFolder === folder.id ? 'bg-blue-100 border-l-4 border-blue-500' : ''
+                      }`}
+                      onClick={() => setSelectedFolder(folder.id)}
+                    >
+                      <span className="mr-2">{folder.icon}</span>
+                      <span className="flex-1 text-sm font-medium">{folder.name}</span>
+                      <span className="text-xs bg-gray-200 px-2 py-1 rounded-full">{folder.count}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">Loading folders...</p>
+                )}
+              </div>
+            )}
+
+            <div className="px-4 pb-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Quick Stats</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Total Folders</span>
+                  <span className="font-medium">{folders.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Total Cards</span>
+                  <span className="font-medium">{cards.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Database</span>
+                  <span className="font-medium text-green-600">Connected</span>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Main Content */}
+          <main className="flex-1 p-6">
+            {currentView === 'dashboard' && (
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h2>
+                
+                <div className="bg-white p-6 rounded-lg shadow-sm mb-6">
+                  <h3 className="text-lg font-semibold mb-4">🗄️ Database Connection Active</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-green-800">Folders Loaded</h4>
+                      <p className="text-2xl font-bold text-green-600">{folders.length}</p>
+                      <p className="text-sm text-green-600">From PostgreSQL</p>
+                    </div>
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-blue-800">Cards Created</h4>
+                      <p className="text-2xl font-bold text-blue-600">{cards.length}</p>
+                      <p className="text-sm text-blue-600">Ready for use</p>
+                    </div>
+                  </div>
+                </div>
+
+                {folders.length > 0 && (
+                  <div className="bg-white rounded-lg shadow-sm">
+                    <div className="px-6 py-4 border-b border-gray-200">
+                      <h3 className="text-lg font-medium text-gray-900">Your Folders</h3>
+                    </div>
+                    <div className="p-6">
+                      <div className="grid grid-cols-2 gap-4">
+                        {folders.map(folder => (
+                          <div key={folder.id} className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-gray-50">
+                            <span className="text-2xl">{folder.icon}</span>
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900">{folder.name}</p>
+                              <p className="text-sm text-gray-500">{folder.count} cards</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {currentView === 'explorer' && (
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Explorer</h2>
+                
+                {cards.length > 0 ? (
+                  <div className="bg-white rounded-lg shadow-sm">
+                    <div className="px-6 py-4 border-b border-gray-200">
+                      <h3 className="text-lg font-medium text-gray-900">Recent Cards</h3>
+                    </div>
+                    <div className="p-6">
+                      <div className="space-y-4">
+                        {cards.map(card => (
+                          <div key={card.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                            <h4 className="font-medium text-gray-900">{card.title}</h4>
+                            {card.body && <p className="text-sm text-gray-600 mt-1">{card.body}</p>}
+                            <p className="text-xs text-gray-500 mt-2">
+                              Created: {new Date(card.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white p-6 rounded-lg shadow-sm">
+                    <p className="text-gray-600 text-center">
+                      No cards yet. Click "New Card" to create your first card!
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+        </div>
+
+        {/* New Card Modal */}
+        {showNewCardModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-md w-full">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-gray-900">Create New Card</h2>
+                  <button 
+                    onClick={() => setShowNewCardModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form onSubmit={handleCreateCard} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Title *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value={newCardData.title}
+                      onChange={(e) => setNewCardData({...newCardData, title: e.target.value})}
+                      placeholder="Enter card title..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Description
+                    </label>
+                    <textarea
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      rows={3}
+                      value={newCardData.body}
+                      onChange={(e) => setNewCardData({...newCardData, body: e.target.value})}
+                      placeholder="Enter card description..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Folder *
+                    </label>
+                    <select
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value={newCardData.folderId}
+                      onChange={(e) => setNewCardData({...newCardData, folderId: e.target.value})}
+                    >
+                      {folders.map(folder => (
+                        <option key={folder.id} value={folder.id}>
+                          {folder.icon} {folder.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex space-x-3 pt-4">
+                    <button
+                      type="submit"
+                      disabled={creating}
+                      className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {creating ? 'Creating...' : 'Create Card'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCardModal(false)}
+                      className="flex-1 border border-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
